@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payroll Management System | Night Ledger</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="is-locked">
+    <section id="lockScreen" class="lock-screen">
+        <div class="lock-panel">
+            <h1>DUBA Payroll</h1>
+            <div class="auth-tabs">
+                <button type="button" id="loginTab" class="auth-tab active" onclick="switchAuthMode('login');">Login</button>
+                <button type="button" id="registerTab" class="auth-tab" onclick="switchAuthMode('register');">Register</button>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="loginUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Unlock</button>
+            </form>
+            <form id="registerForm" class="hidden">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="registerUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="registerPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+            </form>
+        </div>
+    </section>
+
+    <div id="appShell" class="container">
+        <header class="header">
+            <div>
+                <h1>Payroll Management System</h1>
+                <p>Polished dark workspace for payroll management</p>
+            </div>
+            <div class="status-indicator">
+                <span id="statusDot" class="status-dot"></span>
+                <span id="statusText">Checking...</span>
+            </div>
+        </header>
+
+        <nav class="navbar">
+            <button class="nav-btn active" data-page="dashboard">DASHBOARD</button>
+            <button class="nav-btn" data-page="employees">EMPLOYEES</button>
+            <button class="nav-btn" data-page="payroll">PAYROLL</button>
+            <button class="nav-btn" data-page="reports">REPORTS</button>
+            <button class="nav-btn" data-page="settings">SETTINGS</button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Dashboard Page -->
+            <div id="dashboard" class="page active">
+                <div class="dashboard-grid">
+                    <div class="stat-card card-employees">
+                        <div class="card-icon">👥</div>
+                        <h3>Total Employees</h3>
+                        <p class="stat-value" id="totalEmployees">0</p>
+                    </div>
+                    <div class="stat-card card-payroll">
+                        <div class="card-icon">💰</div>
+                        <h3>Total Monthly Payroll</h3>
+                        <p class="stat-value" id="totalPayroll">$0.00</p>
+                    </div>
+                    <div class="stat-card card-average">
+                        <div class="card-icon">📊</div>
+                        <h3>Average Net Salary</h3>
+                        <p class="stat-value" id="averageSalary">$0.00</p>
+                    </div>
+                    <div class="stat-card card-highest">
+                        <div class="card-icon">🏆</div>
+                        <h3>Highest Salary</h3>
+                        <p class="stat-value" id="highestSalary">$0.00</p>
+                        <p class="stat-sub" id="highestName">—</p>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <h2>⚡ Quick Actions</h2>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="switchPage('employees'); showAddEmployeeForm();">✨ Add Employee</button>
+                        <button class="btn btn-info" onclick="switchPage('payroll');">📋 View Payrolls</button>
+                        <button class="btn btn-success" onclick="switchPage('reports'); generateMonthlyReport();">📈 Generate Report</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Employees Page -->
+            <div id="employees" class="page">
+                <div class="page-header">
+                    <h2>Employees</h2>
+                    <button class="btn btn-primary" onclick="showAddEmployeeForm();">+ Add Employee</button>
+                </div>
+
+                <div id="employeeFormContainer" class="form-container hidden">
+                    <form id="employeeForm" class="form">
+                        <h3 id="formTitle">Add New Employee</h3>
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="empName" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Department *</label>
+                            <input type="text" id="empDept" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Basic Salary ($) *</label>
+                            <input type="number" id="empSalary" min="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Allowance ($)</label>
+                            <input type="number" id="empAllowance" min="0" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Bonus Percentage (%)</label>
+                            <input type="number" id="empBonus" min="0" max="100" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Photo</label>
+                            <input type="file" id="empPicture" accept="image/*" onchange="previewImage(this);">
+                            <div id="imagePreviewContainer" class="image-preview-container hidden">
+                                <img id="imagePreview" src="" alt="Preview" style="max-width: 100px; margin-top: 10px;">
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-primary" onclick="saveEmployee();">Save</button>
+                            <button type="button" class="btn btn-secondary" onclick="hideEmployeeForm();">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="employeesList" class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Photo</th>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Department</th>
+                                <th>Salary</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeesTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Payroll Page -->
+            <div id="payroll" class="page">
+                <div class="page-header">
+                    <h2>Payroll</h2>
+                </div>
+                <div id="payrollList" class="payroll-container"></div>
+            </div>
+
+            <!-- Reports Page -->
+            <div id="reports" class="page">
+                <h2>Reports</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-info" onclick="generateMonthlyReport();">Generate Monthly Report</button>
+                    <button class="btn btn-success" onclick="exportEmployees();">Export to JSON</button>
+                </div>
+                <div id="reportContent" class="report-content"></div>
+            </div>
+
+            <!-- Settings Page -->
+            <div id="settings" class="page">
+                <h2>Settings</h2>
+                <div class="settings-section">
+                    <button class="btn btn-info" onclick="showImportForm();">Import Employees</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="payrollModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closePayrollModal();">&times;</span>
+            <div id="payrollDetails"></div>
+        </div>
+    </div>
+
+    <div id="importModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeImportModal();">&times;</span>
+            <h2>Import</h2>
+            <input type="text" id="importFilename" placeholder="employees.json">
+            <button class="btn btn-primary" onclick="importEmployees();">Import</button>
+        </div>
+    </div>
+
+    <div id="notification" class="notification hidden"></div>
+
+    <canvas id="glitterCanvas"></canvas>
+
+    <script src="api.js"></script>
+    <script src="script.js"></script>
+    <script>
+    // Glitter particle system
+    (function(){
+        const canvas = document.getElementById('glitterCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const COLORS = ['#f6c967','#a78bfa','#67e8f9','#34d399','#fb7185','#fff'];
+
+        function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+        window.addEventListener('resize',resize);resize();
+
+        class Particle{
+            constructor(){this.reset()}
+            reset(){
+                this.x=Math.random()*canvas.width;
+                this.y=Math.random()*canvas.height;
+                this.size=Math.random()*2.5+0.5;
+                this.speedX=(Math.random()-0.5)*0.3;
+                this.speedY=(Math.random()-0.5)*0.3;
+                this.opacity=Math.random()*0.6+0.1;
+                this.fadeSpeed=Math.random()*0.008+0.002;
+                this.color=COLORS[Math.floor(Math.random()*COLORS.length)];
+                this.growing=Math.random()>0.5;
+            }
+            update(){
+                this.x+=this.speedX;this.y+=this.speedY;
+                if(this.growing){this.opacity+=this.fadeSpeed;if(this.opacity>=0.7)this.growing=false}
+                else{this.opacity-=this.fadeSpeed;if(this.opacity<=0.05)this.reset()}
+                if(this.x<0||this.x>canvas.width||this.y<0||this.y>canvas.height)this.reset();
+            }
+            draw(){
+                ctx.save();ctx.globalAlpha=this.opacity;
+                ctx.fillStyle=this.color;
+                ctx.shadowBlur=this.size*4;ctx.shadowColor=this.color;
+                ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        for(let i=0;i<80;i++)particles.push(new Particle());
+
+        function animate(){
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            particles.forEach(p=>{p.update();p.draw()});
+            requestAnimationFrame(animate);
+        }
+        animate();
+    })();
+    </script>
+</body>
+</html>
+

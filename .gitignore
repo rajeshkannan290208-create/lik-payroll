@@ -1,0 +1,7 @@
+*.o
+*.exe
+*.obj
+.vscode/
+node_modules/
+dist/
+build/
