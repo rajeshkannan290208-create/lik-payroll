@@ -51,6 +51,12 @@ const PayrollAPI = class {
             if (!response.ok) {
                 if (response.status === 401 && endpoint !== '/auth/login') {
                     this.clearSession();
+                    if (window.lockApp) {
+                        window.lockApp('login');
+                        if (window.showNotification && endpoint !== '/auth/me') {
+                            window.showNotification('Session expired. Please login again.', 'error');
+                        }
+                    }
                 }
                 throw new Error(result.message || 'API Error');
             }
@@ -141,6 +147,10 @@ const PayrollAPI = class {
     }
 
     static getPayrollDetails(emp) {
+        // This is a local helper, but for pure C++ backend, 
+        // we should prefer the /api/payroll/:id endpoint.
+        // We'll keep this as a simple reference for offline mode if needed,
+        // but the main app now uses the server-side calculations.
         const bonus = emp.basicSalary * (emp.bonusPercentage / 100);
         const grossSalary = emp.basicSalary + (emp.allowance || 0) + bonus;
         const tax = grossSalary * this.taxRate;
@@ -231,6 +241,7 @@ const PayrollAPI = class {
     static async createEmployee(d) { return this.request('/employees', 'POST', d); }
     static async updateEmployee(id, d) { return this.request(`/employees/${id}`, 'PUT', d); }
     static async deleteEmployee(id) { return this.request(`/employees/${id}`, 'DELETE'); }
+    static async getPayroll(id) { return this.request(`/payroll/${id}`); }
     static async getMonthlyReport() { return this.request('/report/monthly'); }
     static async getStatistics() { return this.request('/statistics'); }
     static async healthCheck() { return this.request('/health'); }

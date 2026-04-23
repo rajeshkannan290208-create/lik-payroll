@@ -34,13 +34,13 @@ Net Salary = Gross Salary - Total Deductions
 
 ## File Structure
 
-- `ApiServer.h` / `ApiServer.cpp` - C++ HTTP API and static file server
-- `web_server.cpp` - C++ web backend entry point
-- `Employee.h` / `Employee.cpp` - Employee class definition and implementation
-- `Payroll.h` / `Payroll.cpp` - Payroll calculation class
+**C++ Backend:**
+- ✅ ApiServer.cpp / .h
+- ✅ Employee.cpp / .h
+- ✅ Payroll.cpp / .h
+- ✅ web_server.cpp
+- ✅ Build files (Makefile, build.bat)
 - `public/` - Browser UI files (HTML, CSS, JS)
-- `Makefile` - Build configuration for Make
-- `build.bat` - Build script for Windows
 
 ## Compilation
 

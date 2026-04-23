@@ -34,6 +34,10 @@
                     <label>Password</label>
                     <input type="password" id="registerPassword" required>
                 </div>
+                <div class="form-group">
+                    <label>Confirm Password</label>
+                    <input type="password" id="registerConfirmPassword" required>
+                </div>
                 <button type="submit" class="btn btn-primary btn-block">Create Account</button>
             </form>
         </div>
@@ -52,7 +56,7 @@
         </header>
 
         <nav class="navbar">
-            <button class="nav-btn active" data-page="dashboard">DASHBOARD</button>
+            <button class="nav-btn active" data-page="dashboard">BOARD</button>
             <button class="nav-btn" data-page="employees">EMPLOYEES</button>
             <button class="nav-btn" data-page="payroll">PAYROLL</button>
             <button class="nav-btn" data-page="reports">REPORTS</button>
@@ -64,34 +68,29 @@
             <div id="dashboard" class="page active">
                 <div class="dashboard-grid">
                     <div class="stat-card card-employees">
-                        <div class="card-icon">👥</div>
-                        <h3>Total Employees</h3>
+                        <h3>Employees</h3>
                         <p class="stat-value" id="totalEmployees">0</p>
                     </div>
                     <div class="stat-card card-payroll">
-                        <div class="card-icon">💰</div>
                         <h3>Total Monthly Payroll</h3>
                         <p class="stat-value" id="totalPayroll">$0.00</p>
                     </div>
                     <div class="stat-card card-average">
-                        <div class="card-icon">📊</div>
                         <h3>Average Net Salary</h3>
                         <p class="stat-value" id="averageSalary">$0.00</p>
                     </div>
                     <div class="stat-card card-highest">
-                        <div class="card-icon">🏆</div>
                         <h3>Highest Salary</h3>
                         <p class="stat-value" id="highestSalary">$0.00</p>
-                        <p class="stat-sub" id="highestName">—</p>
                     </div>
                 </div>
 
                 <div class="quick-actions">
-                    <h2>⚡ Quick Actions</h2>
+                    <h2>Quick Actions</h2>
                     <div class="action-buttons">
-                        <button class="btn btn-primary" onclick="switchPage('employees'); showAddEmployeeForm();">✨ Add Employee</button>
-                        <button class="btn btn-info" onclick="switchPage('payroll');">📋 View Payrolls</button>
-                        <button class="btn btn-success" onclick="switchPage('reports'); generateMonthlyReport();">📈 Generate Report</button>
+                        <button class="btn btn-primary" onclick="switchPage('employees'); showAddEmployeeForm();">Employee</button>
+                        <button class="btn btn-info" onclick="switchPage('payroll');">View All Payrolls</button>
+                        <button class="btn btn-success" onclick="switchPage('reports'); generateMonthlyReport();">Generate Report</button>
                     </div>
                 </div>
             </div>
@@ -106,6 +105,10 @@
                 <div id="employeeFormContainer" class="form-container hidden">
                     <form id="employeeForm" class="form">
                         <h3 id="formTitle">Add New Employee</h3>
+                        <div class="form-group" id="empIdGroup">
+                            <label>Employee ID (Auto-generated)</label>
+                            <input type="text" id="empId" disabled style="opacity: 0.6; cursor: not-allowed;">
+                        </div>
                         <div class="form-group">
                             <label>Full Name *</label>
                             <input type="text" id="empName" required>
@@ -203,59 +206,8 @@
 
     <div id="notification" class="notification hidden"></div>
 
-    <canvas id="glitterCanvas"></canvas>
-
     <script src="api.js"></script>
     <script src="script.js"></script>
-    <script>
-    // Glitter particle system
-    (function(){
-        const canvas = document.getElementById('glitterCanvas');
-        const ctx = canvas.getContext('2d');
-        let particles = [];
-        const COLORS = ['#f6c967','#a78bfa','#67e8f9','#34d399','#fb7185','#fff'];
-
-        function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
-        window.addEventListener('resize',resize);resize();
-
-        class Particle{
-            constructor(){this.reset()}
-            reset(){
-                this.x=Math.random()*canvas.width;
-                this.y=Math.random()*canvas.height;
-                this.size=Math.random()*2.5+0.5;
-                this.speedX=(Math.random()-0.5)*0.3;
-                this.speedY=(Math.random()-0.5)*0.3;
-                this.opacity=Math.random()*0.6+0.1;
-                this.fadeSpeed=Math.random()*0.008+0.002;
-                this.color=COLORS[Math.floor(Math.random()*COLORS.length)];
-                this.growing=Math.random()>0.5;
-            }
-            update(){
-                this.x+=this.speedX;this.y+=this.speedY;
-                if(this.growing){this.opacity+=this.fadeSpeed;if(this.opacity>=0.7)this.growing=false}
-                else{this.opacity-=this.fadeSpeed;if(this.opacity<=0.05)this.reset()}
-                if(this.x<0||this.x>canvas.width||this.y<0||this.y>canvas.height)this.reset();
-            }
-            draw(){
-                ctx.save();ctx.globalAlpha=this.opacity;
-                ctx.fillStyle=this.color;
-                ctx.shadowBlur=this.size*4;ctx.shadowColor=this.color;
-                ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fill();
-                ctx.restore();
-            }
-        }
-
-        for(let i=0;i<80;i++)particles.push(new Particle());
-
-        function animate(){
-            ctx.clearRect(0,0,canvas.width,canvas.height);
-            particles.forEach(p=>{p.update();p.draw()});
-            requestAnimationFrame(animate);
-        }
-        animate();
-    })();
-    </script>
 </body>
 </html>
 

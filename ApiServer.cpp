@@ -336,6 +336,13 @@ std::string ApiServer::handleApiRequest(const HttpRequest& request) {
         return buildJsonResponse(200, "{\"success\":true,\"data\":" + allPayrollJson() + "}");
     }
 
+    if (startsWith(request.path, "/api/payroll/")) {
+        int id = std::atoi(request.path.substr(13).c_str());
+        int index = findEmployeeIndex(id);
+        if (index == -1) return buildJsonResponse(404, "{\"success\":false,\"message\":\"Not found\"}");
+        return buildJsonResponse(200, "{\"success\":true,\"data\":" + payrollJson(employees[index]) + "}");
+    }
+
     if (request.path == "/api/report/monthly" && request.method == "GET") {
         return buildJsonResponse(200, "{\"success\":true,\"data\":" + monthlyReportJson() + "}");
     }
@@ -625,8 +632,45 @@ bool ApiServer::saveEmployeesToJsonFile(const std::string& filename) const {
 bool ApiServer::loadEmployeesFromJsonFile(const std::string& filename) {
     std::ifstream file(filename.c_str());
     if (!file.is_open()) return false;
-    // Simplified loader: return false to seed if file is empty
-    return false;
+    
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    std::string json = ss.str();
+    if (json.empty() || json == "[]") return false;
+    
+    employees.clear();
+    size_t pos = 0;
+    while ((pos = json.find("\"id\":", pos)) != std::string::npos) {
+        size_t objStart = json.rfind('{', pos);
+        if (objStart == std::string::npos) {
+            pos += 5;
+            continue;
+        }
+        
+        size_t nextId = json.find("\"id\":", pos + 5);
+        if (nextId == std::string::npos) nextId = json.length();
+        
+        std::string obj = json.substr(objStart, nextId - objStart);
+        
+        double id=0, basic=0, allow=0, bonus=0;
+        std::string name, dept, pic;
+        
+        extractJsonNumber(obj, "id", id);
+        extractJsonString(obj, "name", name);
+        extractJsonString(obj, "department", dept);
+        extractJsonNumber(obj, "basicSalary", basic);
+        extractJsonNumber(obj, "allowance", allow);
+        extractJsonNumber(obj, "bonusPercentage", bonus);
+        extractJsonString(obj, "picture", pic);
+        
+        Employee emp(static_cast<int>(id), name, dept, basic, allow, bonus);
+        emp.setPicture(pic);
+        employees.push_back(emp);
+        
+        pos = nextId;
+    }
+    
+    return !employees.empty();
 }
 
 bool ApiServer::saveUsersToFile() const {
@@ -642,7 +686,44 @@ bool ApiServer::saveUsersToFile() const {
 }
 
 bool ApiServer::loadUsersFromFile() {
-    return false;
+    std::ifstream file("users.json");
+    if (!file.is_open()) return false;
+    
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    std::string json = ss.str();
+    if (json.empty() || json == "[]") return false;
+    
+    users.clear();
+    size_t pos = 0;
+    while ((pos = json.find("\"id\":", pos)) != std::string::npos) {
+        size_t objStart = json.rfind('{', pos);
+        if (objStart == std::string::npos) {
+            pos += 5;
+            continue;
+        }
+        
+        size_t nextId = json.find("\"id\":", pos + 5);
+        if (nextId == std::string::npos) nextId = json.length();
+        
+        std::string obj = json.substr(objStart, nextId - objStart);
+        
+        User user;
+        double id = 0;
+        extractJsonNumber(obj, "id", id);
+        user.id = static_cast<int>(id);
+        extractJsonString(obj, "u", user.username);
+        extractJsonString(obj, "p", user.passwordHash);
+        
+        if (user.id >= nextUserId) {
+            nextUserId = user.id + 1;
+        }
+        
+        users.push_back(user);
+        pos = nextId;
+    }
+    
+    return !users.empty();
 }
 
 double ApiServer::currentTimeMillis() { return static_cast<double>(std::time(NULL)) * 1000.0; }

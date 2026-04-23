@@ -67,6 +67,13 @@ function setupAuthEventListeners() {
             event.preventDefault();
             const username = document.getElementById('registerUsername').value;
             const password = document.getElementById('registerPassword').value;
+            const confirm = document.getElementById('registerConfirmPassword').value;
+            
+            if (password !== confirm) {
+                showNotification('Passwords do not match', 'error');
+                return;
+            }
+            
             try {
                 await PayrollAPI.register({ username, password });
                 showNotification('Registered successfully! Please login.', 'success');
@@ -161,6 +168,8 @@ function showAddEmployeeForm() {
     currentEditingEmployee = null;
     document.getElementById('formTitle').textContent = 'Add New Employee';
     document.getElementById('employeeForm').reset();
+    document.getElementById('empId').value = '';
+    document.getElementById('empIdGroup').classList.remove('hidden');
     document.getElementById('imagePreviewContainer').classList.add('hidden');
     document.getElementById('employeeFormContainer').classList.remove('hidden');
 }
@@ -210,6 +219,8 @@ async function editEmployee(id) {
     if (!emp) return;
     currentEditingEmployee = emp;
     document.getElementById('formTitle').textContent = 'Edit Employee';
+    document.getElementById('empId').value = emp.id;
+    document.getElementById('empIdGroup').classList.remove('hidden');
     document.getElementById('empName').value = emp.name;
     document.getElementById('empDept').value = emp.department;
     document.getElementById('empSalary').value = emp.basicSalary;
@@ -293,87 +304,64 @@ async function loadAllPayrolls() {
 
 async function viewPayrollDetails(id) {
     try {
-        const response = await PayrollAPI.request(`/payroll/${id}`);
+        const response = await PayrollAPI.getPayroll(id);
         const p = response.data;
-        
-        const esi = p.deductions.healthInsurance || 0;
+        const esi = 100;
         
         document.getElementById('payrollDetails').innerHTML = `
             <div class="payslip-wrapper">
                 <div class="payslip-header">
-                    <h2>${p.employee.name}</h2>
-                    <p class="text-muted">${p.employee.department} | ID: EMP-${p.employee.id}</p>
+                    <p><strong>Employee ID:</strong> ${p.employee.id}</p>
+                    <p><strong>Department:</strong> ${p.employee.department}</p>
                 </div>
                 
-                <div class="payslip-grid">
-                    <div class="payslip-section earnings">
-                        <h3>💰 Earnings (Additions)</h3>
-                        <div class="payslip-row">
-                            <span>Basic pay</span>
-                            <span>$${p.salary.basic.toFixed(2)}</span>
-                        </div>
-                        <div class="payslip-row">
-                            <span>Allowances (HRA, DA, travel, etc.)</span>
-                            <span>$${(p.salary.allowance || 0).toFixed(2)}</span>
-                        </div>
-                        <div class="payslip-row">
-                            <span>Bonuses / incentives</span>
-                            <span>$${(p.salary.bonus || 0).toFixed(2)}</span>
-                        </div>
-                        <div class="payslip-row">
-                            <span>Overtime pay</span>
-                            <span>$0.00</span>
-                        </div>
-                        <div class="payslip-total">
-                            <strong>Total Earnings</strong>
-                            <strong>$${p.salary.gross.toFixed(2)}</strong>
-                        </div>
+                <div class="payslip-section earnings">
+                    <h3>EARNINGS</h3>
+                    <div class="payslip-row">
+                        <span>Basic Salary:</span>
+                        <span>$${p.salary.basic.toFixed(2)}</span>
                     </div>
+                    <div class="payslip-row">
+                        <span>Allowance:</span>
+                        <span>$${(p.salary.allowance || 0).toFixed(2)}</span>
+                    </div>
+                    <div class="payslip-row">
+                        <span>Bonus:</span>
+                        <span>$${(p.salary.bonus || 0).toFixed(2)}</span>
+                    </div>
+                    <div class="payslip-total">
+                        <span>Gross Salary:</span>
+                        <span>$${p.salary.gross.toFixed(2)}</span>
+                    </div>
+                </div>
 
-                    <div class="payslip-section deductions">
-                        <h3>📉 Deductions</h3>
-                        <div class="payslip-row">
-                            <span>Tax (Income Tax / TDS)</span>
-                            <span>$${p.deductions.tax.toFixed(2)}</span>
-                        </div>
-                        <div class="payslip-row">
-                            <span>PF (Provident Fund)</span>
-                            <span>$${p.deductions.providentFund.toFixed(2)}</span>
-                        </div>
-                        <div class="payslip-row">
-                            <span>ESI (if applicable)</span>
-                            <span>$${esi.toFixed(2)}</span>
-                        </div>
-                        <div class="payslip-row">
-                            <span>Loan or advance deductions</span>
-                            <span>$0.00</span>
-                        </div>
-                        <div class="payslip-total">
-                            <strong>Total Deductions</strong>
-                            <strong>$${p.deductions.total.toFixed(2)}</strong>
-                        </div>
+                <div class="payslip-section deductions">
+                    <h3>DEDUCTIONS</h3>
+                    <div class="payslip-row">
+                        <span>Income Tax (12%):</span>
+                        <span>$${p.deductions.tax.toFixed(2)}</span>
+                    </div>
+                    <div class="payslip-row">
+                        <span>Provident Fund (8%):</span>
+                        <span>$${p.deductions.providentFund.toFixed(2)}</span>
+                    </div>
+                    <div class="payslip-row">
+                        <span>Health Insurance:</span>
+                        <span>$${esi.toFixed(2)}</span>
+                    </div>
+                    <div class="payslip-total">
+                        <span>Total Deductions:</span>
+                        <span>$${p.deductions.total.toFixed(2)}</span>
                     </div>
                 </div>
 
                 <div class="payslip-net">
-                    <h3>🧾 Net Salary</h3>
-                    <p class="net-formula">👉 Final amount employee receives = Earnings – Deductions</p>
+                    <h3>Net Salary:</h3>
                     <div class="net-amount">$${p.netSalary.toFixed(2)}</div>
                 </div>
 
-                <div class="payslip-others">
-                    <h3>📊 Other important parts</h3>
-                    <div class="others-grid">
-                        <div class="other-item"><span class="icon">📄</span> Payslip generation</div>
-                        <div class="other-item"><span class="icon">📅</span> Attendance tracking</div>
-                        <div class="other-item"><span class="icon">🌴</span> Leave management</div>
-                        <div class="other-item"><span class="icon">🧮</span> Salary calculation system</div>
-                        <div class="other-item"><span class="icon">💳</span> Payment method (Bank Transfer)</div>
-                    </div>
-                </div>
-
                 <div class="payslip-actions">
-                    <button class="btn btn-primary" onclick="window.print()">Print / Download</button>
+                    <button class="btn btn-primary" onclick="window.print()">Print</button>
                     <button class="btn btn-secondary" onclick="closePayrollModal()">Close</button>
                 </div>
             </div>
