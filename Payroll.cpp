@@ -1,8 +1,9 @@
 #include "Payroll.h"
 
 double Payroll::calculateGrossSalary(const Employee& emp) const {
-    double bonus = emp.getBasicSalary() * (emp.getBonusPercentage() / 100.0);
-    return emp.getBasicSalary() + emp.getAllowance() + bonus;
+    double earnedBasic = (emp.getBasicSalary() / 30.0) * emp.getAttendance();
+    double bonus = earnedBasic * (emp.getBonusPercentage() / 100.0);
+    return earnedBasic + emp.getAllowance() + bonus;
 }
 
 double Payroll::calculateTax(double grossSalary) const {
@@ -10,7 +11,8 @@ double Payroll::calculateTax(double grossSalary) const {
 }
 
 double Payroll::calculateProvidentFund(const Employee& emp) const {
-    return emp.getBasicSalary() * PROVIDENT_FUND_RATE;
+    double earnedBasic = (emp.getBasicSalary() / 30.0) * emp.getAttendance();
+    return earnedBasic * PROVIDENT_FUND_RATE;
 }
 
 double Payroll::calculateTotalDeductions(double grossSalary, const Employee& emp) const {
@@ -23,6 +25,10 @@ double Payroll::calculateNetSalary(const Employee& emp) const {
     double grossSalary = calculateGrossSalary(emp);
     double deductions = calculateTotalDeductions(grossSalary, emp);
     return grossSalary - deductions;
+}
+
+double Payroll::calculateSalaryPerDay(const Employee& emp) const {
+    return emp.getBasicSalary() / 30.0;
 }
 
 void Payroll::displayPayrollSlip(const Employee& emp) const {

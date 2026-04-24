@@ -49,6 +49,19 @@ int socketErrorValue() {
 #endif
 }
 
+void setClientSocketTimeouts(SocketType socketHandle, int timeoutMs) {
+#ifdef _WIN32
+    setsockopt(socketHandle, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
+    setsockopt(socketHandle, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
+#else
+    timeval timeoutValue;
+    timeoutValue.tv_sec = timeoutMs / 1000;
+    timeoutValue.tv_usec = (timeoutMs % 1000) * 1000;
+    setsockopt(socketHandle, SOL_SOCKET, SO_RCVTIMEO, &timeoutValue, sizeof(timeoutValue));
+    setsockopt(socketHandle, SOL_SOCKET, SO_SNDTIMEO, &timeoutValue, sizeof(timeoutValue));
+#endif
+}
+
 bool sendAll(SocketType socketHandle, const std::string& response) {
     std::size_t totalSent = 0;
 
@@ -66,6 +79,25 @@ bool sendAll(SocketType socketHandle, const std::string& response) {
 
     return true;
 }
+
+Employee makeSeedEmployee(int employeeId) {
+    switch (employeeId) {
+        case 101:
+            return Employee(101, "John Smith", "Engineering", 5000, 500, 10);
+        case 102:
+            return Employee(102, "Sarah Johnson", "Marketing", 4500, 450, 8);
+        case 103:
+            return Employee(103, "Mike Williams", "HR", 4000, 400, 7);
+        case 104:
+            return Employee(104, "Emily Brown", "Finance", 5500, 550, 12);
+        default:
+            return Employee();
+    }
+}
+
+bool isSeedEmployeeId(int employeeId) {
+    return employeeId >= 101 && employeeId <= 104;
+}
 }
 
 ApiServer::ApiServer(int serverPort) : port(serverPort), nextUserId(1) {
@@ -77,6 +109,25 @@ ApiServer::ApiServer(int serverPort) : port(serverPort), nextUserId(1) {
     }
     
     loadUsersFromFile();
+
+    bool repairedEmployees = false;
+    for (std::size_t i = 0; i < users.size(); ++i) {
+        if (users[i].role != "user" || users[i].employeeId <= 0) continue;
+        if (findEmployeeIndex(users[i].employeeId) != -1) continue;
+        if (!isSeedEmployeeId(users[i].employeeId)) continue;
+
+        employees.push_back(makeSeedEmployee(users[i].employeeId));
+        repairedEmployees = true;
+    }
+
+    if (repairedEmployees) {
+        std::sort(employees.begin(), employees.end(), [](const Employee& a, const Employee& b) {
+            return a.getEmployeeId() < b.getEmployeeId();
+        });
+        saveEmployeesToJsonFile("employees.json");
+    }
+
+    loadAttendanceFromFile();
 }
 
 void ApiServer::seedEmployees() {
@@ -152,6 +203,7 @@ bool ApiServer::start() {
             continue;
         }
 
+        setClientSocketTimeouts(clientSocket, 250);
         handleClient(static_cast<std::intptr_t>(clientSocket));
     }
 
@@ -168,6 +220,7 @@ void ApiServer::handleClient(std::intptr_t clientSocketValue) {
     char buffer[4096];
     int contentLength = 0;
     std::size_t headerEnd = std::string::npos;
+    bool extendedTimeout = false;
 
     while (true) {
         int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
@@ -177,6 +230,10 @@ void ApiServer::handleClient(std::intptr_t clientSocketValue) {
         }
 
         rawRequest.append(buffer, bytesReceived);
+        if (!extendedTimeout) {
+            setClientSocketTimeouts(clientSocket, 1000);
+            extendedTimeout = true;
+        }
         headerEnd = rawRequest.find("\r\n\r\n");
 
         if (headerEnd != std::string::npos) {
@@ -257,34 +314,264 @@ std::string ApiServer::handleRequest(const HttpRequest& request) {
 
 std::string ApiServer::handleApiRequest(const HttpRequest& request) {
     if (request.path == "/api/health" && request.method == "GET") {
-        return buildJsonResponse(200, "{\"success\":true,\"message\":\"C++ API is running\",\"userCount\":" + numberJson(users.size()) + "}");
+        std::size_t adminCount = 0;
+        std::size_t userCount = 0;
+        for (std::size_t i = 0; i < users.size(); ++i) {
+            if (users[i].role == "admin") adminCount++;
+            if (users[i].role == "user") userCount++;
+        }
+
+        return buildJsonResponse(200,
+                                 "{\"success\":true,\"message\":\"C++ API is running\","
+                                 "\"userCount\":" + numberJson(users.size()) + ","
+                                 "\"adminCount\":" + numberJson(adminCount) + ","
+                                 "\"employeeUserCount\":" + numberJson(userCount) +
+                                 "}");
     }
 
     if (startsWith(request.path, "/api/auth/")) {
         return handleAuthRequest(request);
     }
-    if (!isAuthenticated(request)) {
+
+    int authUserIndex = authenticatedUserIndex(request);
+    if (authUserIndex == -1) {
         return buildJsonResponse(401, "{\"success\":false,\"message\":\"Login required\"}");
     }
 
+    const User& authUser = users[authUserIndex];
+    const bool isAdmin = authUser.role == "admin";
+    const bool isEmployeeUser = authUser.role == "user";
+
+    if (request.path == "/api/employees/me" && request.method == "GET") {
+        if (!isEmployeeUser) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"User access required\"}");
+        }
+        if (authUser.employeeId <= 0) {
+            return buildJsonResponse(400, "{\"success\":false,\"message\":\"User is not linked to an employee\"}");
+        }
+        int index = findEmployeeIndex(authUser.employeeId);
+        if (index == -1) {
+            return buildJsonResponse(404, "{\"success\":false,\"message\":\"Employee not found\"}");
+        }
+        return buildJsonResponse(200, "{\"success\":true,\"data\":" + employeeJson(employees[index]) + "}");
+    }
+
+    if (request.path == "/api/payroll/me" && request.method == "GET") {
+        if (!isEmployeeUser) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"User access required\"}");
+        }
+        if (authUser.employeeId <= 0) {
+            return buildJsonResponse(400, "{\"success\":false,\"message\":\"User is not linked to an employee\"}");
+        }
+        int index = findEmployeeIndex(authUser.employeeId);
+        if (index == -1) {
+            return buildJsonResponse(404, "{\"success\":false,\"message\":\"Employee not found\"}");
+        }
+        return buildJsonResponse(200, "{\"success\":true,\"data\":" + payrollJson(employees[index]) + "}");
+    }
+
+    if (request.path == "/api/attendance/mark" && request.method == "POST") {
+        if (!isEmployeeUser) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"User access required\"}");
+        }
+        if (authUser.employeeId <= 0) {
+            return buildJsonResponse(400, "{\"success\":false,\"message\":\"User is not linked to an employee\"}");
+        }
+
+        int empIndex = findEmployeeIndex(authUser.employeeId);
+        if (empIndex == -1) {
+            return buildJsonResponse(404, "{\"success\":false,\"message\":\"Employee not found\"}");
+        }
+
+        std::string today = currentDateISO();
+        for (std::size_t i = 0; i < attendanceRecords.size(); ++i) {
+            if (attendanceRecords[i].employeeId == authUser.employeeId &&
+                attendanceRecords[i].date == today) {
+                return buildJsonResponse(409, "{\"success\":false,\"message\":\"Attendance already marked for today\"}");
+            }
+        }
+
+        AttendanceRecord record;
+        record.employeeId = authUser.employeeId;
+        record.date = today;
+        record.timestamp = currentTimeMillis();
+        attendanceRecords.push_back(record);
+        saveAttendanceToFile();
+
+        std::string monthPrefix = currentMonthISO();
+        int monthCount = 0;
+        for (std::size_t i = 0; i < attendanceRecords.size(); ++i) {
+            const AttendanceRecord& r = attendanceRecords[i];
+            if (r.employeeId != authUser.employeeId) continue;
+            if (r.date.size() >= 7 && r.date.substr(0, 7) == monthPrefix) monthCount++;
+        }
+        employees[empIndex].setAttendance(monthCount);
+        saveEmployeesToJsonFile("employees.json");
+
+        std::ostringstream data;
+        data << "{";
+        data << "\"employeeId\":" << authUser.employeeId << ",";
+        data << "\"date\":\"" << today << "\",";
+        data << "\"attendanceThisMonth\":" << monthCount;
+        data << "}";
+
+        return buildJsonResponse(201, "{\"success\":true,\"data\":" + data.str() + ",\"message\":\"Attendance marked\"}");
+    }
+
+    if (request.path == "/api/attendance/me" && request.method == "GET") {
+        if (!isEmployeeUser) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"User access required\"}");
+        }
+        if (authUser.employeeId <= 0) {
+            return buildJsonResponse(400, "{\"success\":false,\"message\":\"User is not linked to an employee\"}");
+        }
+
+        std::vector<AttendanceRecord> filtered;
+        for (std::size_t i = 0; i < attendanceRecords.size(); ++i) {
+            if (attendanceRecords[i].employeeId == authUser.employeeId) {
+                filtered.push_back(attendanceRecords[i]);
+            }
+        }
+        std::sort(filtered.begin(), filtered.end(), [](const AttendanceRecord& a, const AttendanceRecord& b) {
+            if (a.date != b.date) return a.date > b.date;
+            return a.timestamp > b.timestamp;
+        });
+
+        std::ostringstream json;
+        json << "[";
+        for (std::size_t i = 0; i < filtered.size(); ++i) {
+            if (i > 0) json << ",";
+            json << "{";
+            json << "\"employeeId\":" << filtered[i].employeeId << ",";
+            json << "\"date\":\"" << jsonEscape(filtered[i].date) << "\",";
+            json << "\"timestamp\":" << numberJson(filtered[i].timestamp);
+            json << "}";
+        }
+        json << "]";
+
+        return buildJsonResponse(200, "{\"success\":true,\"data\":" + json.str() + ",\"count\":" + numberJson(filtered.size()) + "}");
+    }
+
+    if (request.path == "/api/attendance" && request.method == "GET") {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
+
+        std::vector<AttendanceRecord> records = attendanceRecords;
+        std::sort(records.begin(), records.end(), [](const AttendanceRecord& a, const AttendanceRecord& b) {
+            if (a.date != b.date) return a.date > b.date;
+            return a.timestamp > b.timestamp;
+        });
+
+        std::ostringstream json;
+        json << "[";
+        for (std::size_t i = 0; i < records.size(); ++i) {
+            if (i > 0) json << ",";
+            json << "{";
+            json << "\"employeeId\":" << records[i].employeeId << ",";
+            json << "\"date\":\"" << jsonEscape(records[i].date) << "\",";
+            json << "\"timestamp\":" << numberJson(records[i].timestamp);
+            json << "}";
+        }
+        json << "]";
+
+        return buildJsonResponse(200, "{\"success\":true,\"data\":" + json.str() + ",\"count\":" + numberJson(records.size()) + "}");
+    }
+
+    if (request.path == "/api/admin/users" && request.method == "GET") {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
+
+        std::ostringstream json;
+        json << "[";
+        std::size_t count = 0;
+        for (std::size_t i = 0; i < users.size(); ++i) {
+            if (users[i].role != "user") continue;
+            if (count > 0) json << ",";
+            json << userJson(users[i]);
+            count++;
+        }
+        json << "]";
+
+        return buildJsonResponse(200, "{\"success\":true,\"data\":" + json.str() + ",\"count\":" + numberJson(count) + "}");
+    }
+
+    if (request.path == "/api/admin/users" && request.method == "POST") {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
+
+        std::string username, password;
+        double employeeIdNumber = 0;
+        extractJsonString(request.body, "username", username);
+        extractJsonString(request.body, "password", password);
+        extractJsonNumber(request.body, "employeeId", employeeIdNumber);
+
+        username = normalizeUsername(username);
+        int employeeId = static_cast<int>(employeeIdNumber);
+        if (username.empty() || password.empty() || employeeId <= 0) {
+            return buildJsonResponse(400, "{\"success\":false,\"message\":\"username, password and employeeId are required\"}");
+        }
+
+        if (findUserIndexByUsername(username) != -1) {
+            return buildJsonResponse(409, "{\"success\":false,\"message\":\"Username already exists\"}");
+        }
+
+        int empIndex = findEmployeeIndex(employeeId);
+        if (empIndex == -1) {
+            return buildJsonResponse(404, "{\"success\":false,\"message\":\"Employee not found\"}");
+        }
+
+        for (std::size_t i = 0; i < users.size(); ++i) {
+            if (users[i].role == "user" && users[i].employeeId == employeeId) {
+                return buildJsonResponse(409, "{\"success\":false,\"message\":\"Employee already has a login\"}");
+            }
+        }
+
+        User user;
+        user.id = nextUserId++;
+        user.username = username;
+        user.passwordHash = passwordDigest(username, password);
+        user.role = "user";
+        user.employeeId = employeeId;
+        users.push_back(user);
+        saveUsersToFile();
+
+        return buildJsonResponse(201, "{\"success\":true,\"data\":" + userJson(user) + ",\"message\":\"User created\"}");
+    }
 
     if (request.path == "/api/employees" && request.method == "GET") {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
         return buildJsonResponse(200, "{\"success\":true,\"data\":" + employeesJson() + ",\"count\":" + numberJson(employees.size()) + "}");
     }
 
     if (request.path == "/api/employees" && request.method == "POST") {
-        std::string name, dept, pic;
-        double salary = 0, allowance = 0, bonus = 0;
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
+        std::string name, dept, pic, payMethod, bName, accNum, doj;
+        double salary = 0, allowance = 0, bonus = 0, attendance = 30, leaveDays = 0;
 
         extractJsonString(request.body, "name", name);
         extractJsonString(request.body, "department", dept);
         extractJsonString(request.body, "picture", pic);
+        extractJsonString(request.body, "paymentMethod", payMethod);
+        if (payMethod.empty()) payMethod = "Bank Transfer";
+        extractJsonString(request.body, "bankName", bName);
+        extractJsonString(request.body, "accountNumber", accNum);
+        extractJsonString(request.body, "dateOfJoin", doj);
+        
         extractJsonNumber(request.body, "basicSalary", salary);
         extractJsonNumber(request.body, "allowance", allowance);
         extractJsonNumber(request.body, "bonusPercentage", bonus);
+        extractJsonNumber(request.body, "attendance", attendance);
+        extractJsonNumber(request.body, "leaveDays", leaveDays);
 
-        Employee emp(nextEmployeeId(), name, dept, salary, allowance, bonus);
-        emp.setPicture(pic);
+        Employee emp(nextEmployeeId(), name, dept, salary, allowance, bonus, pic, 
+                     static_cast<int>(attendance), static_cast<int>(leaveDays), payMethod, bName, accNum, doj);
         employees.push_back(emp);
         saveEmployeesToJsonFile("employees.json");
 
@@ -292,6 +579,9 @@ std::string ApiServer::handleApiRequest(const HttpRequest& request) {
     }
 
     if (startsWith(request.path, "/api/employees/")) {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
         int id = std::atoi(request.path.substr(15).c_str());
         int index = findEmployeeIndex(id);
 
@@ -307,19 +597,34 @@ std::string ApiServer::handleApiRequest(const HttpRequest& request) {
             std::string name = employees[index].getName();
             std::string dept = employees[index].getDepartment();
             std::string pic = employees[index].getPicture();
+            std::string payMethod = employees[index].getPaymentMethod();
+            std::string bName = employees[index].getBankName();
+            std::string accNum = employees[index].getAccountNumber();
+            std::string doj = employees[index].getDateOfJoin();
+            
             double salary = employees[index].getBasicSalary();
             double allowance = employees[index].getAllowance();
             double bonus = employees[index].getBonusPercentage();
+            double attendance = employees[index].getAttendance();
+            double leaveDays = employees[index].getLeaveDays();
 
             extractJsonString(request.body, "name", name);
             extractJsonString(request.body, "department", dept);
             extractJsonString(request.body, "picture", pic);
+            extractJsonString(request.body, "paymentMethod", payMethod);
+            extractJsonString(request.body, "bankName", bName);
+            extractJsonString(request.body, "accountNumber", accNum);
+            extractJsonString(request.body, "dateOfJoin", doj);
+            
             extractJsonNumber(request.body, "basicSalary", salary);
             extractJsonNumber(request.body, "allowance", allowance);
             extractJsonNumber(request.body, "bonusPercentage", bonus);
+            extractJsonNumber(request.body, "attendance", attendance);
+            extractJsonNumber(request.body, "leaveDays", leaveDays);
 
-            employees[index] = Employee(id, name, dept, salary, allowance, bonus);
-            employees[index].setPicture(pic);
+            employees[index] = Employee(id, name, dept, salary, allowance, bonus, pic,
+                                       static_cast<int>(attendance), static_cast<int>(leaveDays),
+                                       payMethod, bName, accNum, doj);
             saveEmployeesToJsonFile("employees.json");
 
             return buildJsonResponse(200, "{\"success\":true,\"data\":" + employeeJson(employees[index]) + "}");
@@ -333,10 +638,16 @@ std::string ApiServer::handleApiRequest(const HttpRequest& request) {
     }
 
     if (request.path == "/api/payroll" && request.method == "GET") {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
         return buildJsonResponse(200, "{\"success\":true,\"data\":" + allPayrollJson() + "}");
     }
 
     if (startsWith(request.path, "/api/payroll/")) {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
         int id = std::atoi(request.path.substr(13).c_str());
         int index = findEmployeeIndex(id);
         if (index == -1) return buildJsonResponse(404, "{\"success\":false,\"message\":\"Not found\"}");
@@ -344,10 +655,16 @@ std::string ApiServer::handleApiRequest(const HttpRequest& request) {
     }
 
     if (request.path == "/api/report/monthly" && request.method == "GET") {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
         return buildJsonResponse(200, "{\"success\":true,\"data\":" + monthlyReportJson() + "}");
     }
 
     if (request.path == "/api/statistics" && request.method == "GET") {
+        if (!isAdmin) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin access required\"}");
+        }
         return buildJsonResponse(200, "{\"success\":true,\"data\":" + statisticsJson() + "}");
     }
 
@@ -356,6 +673,17 @@ std::string ApiServer::handleApiRequest(const HttpRequest& request) {
 
 std::string ApiServer::handleAuthRequest(const HttpRequest& request) {
     if (request.path == "/api/auth/register" && request.method == "POST") {
+        bool adminExists = false;
+        for (std::size_t i = 0; i < users.size(); ++i) {
+            if (users[i].role == "admin") {
+                adminExists = true;
+                break;
+            }
+        }
+        if (adminExists) {
+            return buildJsonResponse(403, "{\"success\":false,\"message\":\"Admin already exists. Ask admin to create employee logins.\"}");
+        }
+
         std::string username, password;
         extractJsonString(request.body, "username", username);
         extractJsonString(request.body, "password", password);
@@ -369,22 +697,45 @@ std::string ApiServer::handleAuthRequest(const HttpRequest& request) {
         user.id = nextUserId++;
         user.username = username;
         user.passwordHash = passwordDigest(username, password);
+        user.role = "admin";
+        user.employeeId = -1;
         users.push_back(user);
         saveUsersToFile();
 
         return buildJsonResponse(201, "{\"success\":true,\"message\":\"Registered\"}");
     }
 
-    if (request.path == "/api/auth/login" && request.method == "POST") {
+    if ((request.path == "/api/auth/login" ||
+         request.path == "/api/auth/admin/login" ||
+         request.path == "/api/auth/user/login") && request.method == "POST") {
         std::string username, password;
         extractJsonString(request.body, "username", username);
         extractJsonString(request.body, "password", password);
 
         username = normalizeUsername(username);
         int index = findUserIndexByUsername(username);
+        std::string expectedPasswordHash = passwordDigest(username, password);
+        bool passwordMatches = index != -1 &&
+                               (users[index].passwordHash == expectedPasswordHash ||
+                                users[index].passwordHash == password);
 
-        if (index == -1 || users[index].passwordHash != passwordDigest(username, password)) {
+        if (!passwordMatches) {
             return buildJsonResponse(401, "{\"success\":false,\"message\":\"Invalid credentials\"}");
+        }
+
+        if (users[index].passwordHash != expectedPasswordHash) {
+            users[index].passwordHash = expectedPasswordHash;
+            saveUsersToFile();
+        }
+
+        if (request.path == "/api/auth/admin/login" && users[index].role != "admin") {
+            return buildJsonResponse(401, "{\"success\":false,\"message\":\"Admin credentials required\"}");
+        }
+        if (request.path == "/api/auth/user/login" && users[index].role != "user") {
+            return buildJsonResponse(401, "{\"success\":false,\"message\":\"User credentials required\"}");
+        }
+        if (request.path == "/api/auth/user/login" && users[index].employeeId <= 0) {
+            return buildJsonResponse(401, "{\"success\":false,\"message\":\"User account is not linked to an employee\"}");
         }
 
         Session session;
@@ -393,7 +744,12 @@ std::string ApiServer::handleAuthRequest(const HttpRequest& request) {
         session.expiresAt = currentTimeMillis() + 3600000;
         sessions.push_back(session);
 
-        return buildJsonResponse(200, "{\"success\":true,\"data\":{\"token\":\"" + session.token + "\",\"expiresAt\":" + numberJson(session.expiresAt) + ",\"user\":{\"id\":" + numberJson(users[index].id) + ",\"username\":\"" + users[index].username + "\"}},\"message\":\"Login successful\"}");
+        return buildJsonResponse(200,
+                                 "{\"success\":true,\"data\":{"
+                                 "\"token\":\"" + session.token + "\","
+                                 "\"expiresAt\":" + numberJson(session.expiresAt) + ","
+                                 "\"user\":" + userJson(users[index]) +
+                                 "},\"message\":\"Login successful\"}");
     }
 
     if (request.path == "/api/auth/me" && request.method == "GET") {
@@ -419,7 +775,18 @@ std::string ApiServer::handleAuthRequest(const HttpRequest& request) {
 }
 
 std::string ApiServer::handleStaticRequest(const HttpRequest& request) const {
-    std::string path = request.path == "/" ? "/index.html" : request.path;
+    std::string path = request.path;
+    if (path == "/") {
+        path = "/index.html";
+    } else if (!path.empty() && path[path.size() - 1] == '/') {
+        path += "index.html";
+    } else {
+        std::size_t lastSlash = path.find_last_of('/');
+        std::size_t lastDot = path.find_last_of('.');
+        if (lastDot == std::string::npos || (lastSlash != std::string::npos && lastDot < lastSlash)) {
+            path += "/index.html";
+        }
+    }
     if (path.find("..") != std::string::npos) return buildResponse(403, "text/plain", "Forbidden");
     if (!path.empty() && path[0] == '/') path.erase(0, 1);
 
@@ -433,16 +800,29 @@ std::string ApiServer::handleStaticRequest(const HttpRequest& request) const {
 }
 
 std::string ApiServer::buildResponse(int statusCode, const std::string& contentType, const std::string& body) const {
+    std::string reasonPhrase = "OK";
+    if (statusCode == 201) reasonPhrase = "Created";
+    else if (statusCode == 204) reasonPhrase = "No Content";
+    else if (statusCode == 400) reasonPhrase = "Bad Request";
+    else if (statusCode == 401) reasonPhrase = "Unauthorized";
+    else if (statusCode == 403) reasonPhrase = "Forbidden";
+    else if (statusCode == 404) reasonPhrase = "Not Found";
+    else if (statusCode == 409) reasonPhrase = "Conflict";
+
     std::ostringstream response;
-    response << "HTTP/1.1 " << statusCode << " OK\r\n";
-    response << "Content-Type: " << contentType << "\r\n";
-    response << "Content-Length: " << body.size() << "\r\n";
+    response << "HTTP/1.1 " << statusCode << " " << reasonPhrase << "\r\n";
+    if (statusCode != 204) {
+        response << "Content-Type: " << contentType << "\r\n";
+        response << "Content-Length: " << body.size() << "\r\n";
+    }
     response << "Access-Control-Allow-Origin: *\r\n";
     response << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
     response << "Access-Control-Allow-Headers: Content-Type, Authorization\r\n";
     response << "Connection: close\r\n";
     response << "\r\n";
-    response << body;
+    if (statusCode != 204) {
+        response << body;
+    }
     return response.str();
 }
 
@@ -451,7 +831,7 @@ std::string ApiServer::buildJsonResponse(int statusCode, const std::string& body
 }
 
 std::string ApiServer::buildNoContentResponse() const {
-    return buildResponse(204, "text/plain", "");
+    return buildResponse(204, "", "");
 }
 
 std::string ApiServer::employeesJson() const {
@@ -474,19 +854,31 @@ std::string ApiServer::employeeJson(const Employee& employee) const {
     json << "\"basicSalary\":" << numberJson(employee.getBasicSalary()) << ",";
     json << "\"allowance\":" << numberJson(employee.getAllowance()) << ",";
     json << "\"bonusPercentage\":" << numberJson(employee.getBonusPercentage()) << ",";
-    json << "\"picture\":\"" << jsonEscape(employee.getPicture()) << "\"";
+    json << "\"picture\":\"" << jsonEscape(employee.getPicture()) << "\",";
+    json << "\"attendance\":" << employee.getAttendance() << ",";
+    json << "\"leaveDays\":" << employee.getLeaveDays() << ",";
+    json << "\"paymentMethod\":\"" << jsonEscape(employee.getPaymentMethod()) << "\",";
+    json << "\"bankName\":\"" << jsonEscape(employee.getBankName()) << "\",";
+    json << "\"accountNumber\":\"" << jsonEscape(employee.getAccountNumber()) << "\",";
+    json << "\"dateOfJoin\":\"" << jsonEscape(employee.getDateOfJoin()) << "\"";
     json << "}";
     return json.str();
 }
 
 std::string ApiServer::userJson(const User& user) const {
     std::ostringstream json;
-    json << "{\"id\":" << user.id << ",\"username\":\"" << jsonEscape(user.username) << "\"}";
+    json << "{";
+    json << "\"id\":" << user.id << ",";
+    json << "\"username\":\"" << jsonEscape(user.username) << "\",";
+    json << "\"role\":\"" << jsonEscape(user.role) << "\",";
+    json << "\"employeeId\":" << numberJson(user.employeeId);
+    json << "}";
     return json.str();
 }
 
 std::string ApiServer::payrollJson(const Employee& employee) const {
-    double bonus = employee.getBasicSalary() * (employee.getBonusPercentage() / 100.0);
+    double earnedBasic = (employee.getBasicSalary() / 30.0) * employee.getAttendance();
+    double bonus = earnedBasic * (employee.getBonusPercentage() / 100.0);
     double gross = payroll.calculateGrossSalary(employee);
     double tax = payroll.calculateTax(gross);
     double providentFund = payroll.calculateProvidentFund(employee);
@@ -498,10 +890,19 @@ std::string ApiServer::payrollJson(const Employee& employee) const {
     json << "\"employee\":{";
     json << "\"id\":" << employee.getEmployeeId() << ",";
     json << "\"name\":\"" << jsonEscape(employee.getName()) << "\",";
-    json << "\"department\":\"" << jsonEscape(employee.getDepartment()) << "\"";
+    json << "\"department\":\"" << jsonEscape(employee.getDepartment()) << "\",";
+    json << "\"picture\":\"" << jsonEscape(employee.getPicture()) << "\",";
+    json << "\"attendance\":" << employee.getAttendance() << ",";
+    json << "\"leaveDays\":" << employee.getLeaveDays() << ",";
+    json << "\"paymentMethod\":\"" << jsonEscape(employee.getPaymentMethod()) << "\",";
+    json << "\"bankName\":\"" << jsonEscape(employee.getBankName()) << "\",";
+    json << "\"accountNumber\":\"" << jsonEscape(employee.getAccountNumber()) << "\",";
+    json << "\"dateOfJoin\":\"" << jsonEscape(employee.getDateOfJoin()) << "\"";
     json << "},";
     json << "\"salary\":{";
     json << "\"basic\":" << numberJson(employee.getBasicSalary()) << ",";
+    json << "\"salaryPerDay\":" << numberJson(payroll.calculateSalaryPerDay(employee)) << ",";
+    json << "\"earnedBasic\":" << numberJson(earnedBasic) << ",";
     json << "\"allowance\":" << numberJson(employee.getAllowance()) << ",";
     json << "\"bonus\":" << numberJson(bonus) << ",";
     json << "\"gross\":" << numberJson(gross);
@@ -604,16 +1005,23 @@ int ApiServer::findSessionIndex(const std::string& token) const {
 }
 
 int ApiServer::nextEmployeeId() const {
-    int maxId = 100;
-    for (std::size_t i = 0; i < employees.size(); ++i) {
-        if (employees[i].getEmployeeId() > maxId) maxId = employees[i].getEmployeeId();
+    int candidate = 101;
+    while (findEmployeeIndex(candidate) != -1) {
+        candidate++;
     }
-    return maxId + 1;
+    return candidate;
 }
 
 bool ApiServer::isAuthenticated(const HttpRequest& request) const {
     int idx = findSessionIndex(bearerToken(request));
     return idx != -1 && sessions[idx].expiresAt > currentTimeMillis();
+}
+
+int ApiServer::authenticatedUserIndex(const HttpRequest& request) const {
+    std::string token = bearerToken(request);
+    int sIdx = findSessionIndex(token);
+    if (sIdx == -1 || sessions[sIdx].expiresAt <= currentTimeMillis()) return -1;
+    return findUserIndexById(sessions[sIdx].userId);
 }
 
 std::string ApiServer::makeSessionToken() const {
@@ -652,8 +1060,8 @@ bool ApiServer::loadEmployeesFromJsonFile(const std::string& filename) {
         
         std::string obj = json.substr(objStart, nextId - objStart);
         
-        double id=0, basic=0, allow=0, bonus=0;
-        std::string name, dept, pic;
+        double id=0, basic=0, allow=0, bonus=0, att=30, leave=0;
+        std::string name, dept, pic, payMethod, bName, accNum, doj;
         
         extractJsonNumber(obj, "id", id);
         extractJsonString(obj, "name", name);
@@ -662,9 +1070,17 @@ bool ApiServer::loadEmployeesFromJsonFile(const std::string& filename) {
         extractJsonNumber(obj, "allowance", allow);
         extractJsonNumber(obj, "bonusPercentage", bonus);
         extractJsonString(obj, "picture", pic);
+        extractJsonNumber(obj, "attendance", att);
+        extractJsonNumber(obj, "leaveDays", leave);
+        extractJsonString(obj, "paymentMethod", payMethod);
+        extractJsonString(obj, "bankName", bName);
+        extractJsonString(obj, "accountNumber", accNum);
+        extractJsonString(obj, "dateOfJoin", doj);
         
-        Employee emp(static_cast<int>(id), name, dept, basic, allow, bonus);
-        emp.setPicture(pic);
+        if (payMethod.empty()) payMethod = "Bank Transfer";
+        
+        Employee emp(static_cast<int>(id), name, dept, basic, allow, bonus, pic,
+                     static_cast<int>(att), static_cast<int>(leave), payMethod, bName, accNum, doj);
         employees.push_back(emp);
         
         pos = nextId;
@@ -679,7 +1095,13 @@ bool ApiServer::saveUsersToFile() const {
     file << "[";
     for (std::size_t i = 0; i < users.size(); ++i) {
         if (i > 0) file << ",";
-        file << "{\"id\":" << users[i].id << ",\"u\":\"" << users[i].username << "\",\"p\":\"" << users[i].passwordHash << "\"}";
+        file << "{";
+        file << "\"id\":" << users[i].id << ",";
+        file << "\"u\":\"" << users[i].username << "\",";
+        file << "\"p\":\"" << users[i].passwordHash << "\",";
+        file << "\"role\":\"" << users[i].role << "\",";
+        file << "\"employeeId\":" << users[i].employeeId;
+        file << "}";
     }
     file << "]";
     return true;
@@ -714,6 +1136,25 @@ bool ApiServer::loadUsersFromFile() {
         user.id = static_cast<int>(id);
         extractJsonString(obj, "u", user.username);
         extractJsonString(obj, "p", user.passwordHash);
+
+        user.username = normalizeUsername(user.username);
+
+        std::string role;
+        if (!extractJsonString(obj, "role", role) || role.empty()) {
+            role = "admin"; // legacy users.json entries default to admin
+        }
+        user.role = role;
+
+        double employeeId = -1;
+        if (extractJsonNumber(obj, "employeeId", employeeId)) {
+            user.employeeId = static_cast<int>(employeeId);
+        } else {
+            user.employeeId = -1;
+        }
+
+        if (user.role != "user") {
+            user.employeeId = -1;
+        }
         
         if (user.id >= nextUserId) {
             nextUserId = user.id + 1;
@@ -726,17 +1167,96 @@ bool ApiServer::loadUsersFromFile() {
     return !users.empty();
 }
 
+bool ApiServer::saveAttendanceToFile() const {
+    std::ofstream file("attendance.json");
+    if (!file.is_open()) return false;
+
+    file << "[";
+    for (std::size_t i = 0; i < attendanceRecords.size(); ++i) {
+        if (i > 0) file << ",";
+        file << "{";
+        file << "\"employeeId\":" << attendanceRecords[i].employeeId << ",";
+        file << "\"date\":\"" << attendanceRecords[i].date << "\",";
+        file << "\"timestamp\":" << numberJson(attendanceRecords[i].timestamp);
+        file << "}";
+    }
+    file << "]";
+    return true;
+}
+
+bool ApiServer::loadAttendanceFromFile() {
+    std::ifstream file("attendance.json");
+    if (!file.is_open()) return false;
+
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    std::string json = ss.str();
+    if (json.empty() || json == "[]") return false;
+
+    attendanceRecords.clear();
+    size_t pos = 0;
+    while ((pos = json.find("\"employeeId\":", pos)) != std::string::npos) {
+        size_t objStart = json.rfind('{', pos);
+        if (objStart == std::string::npos) {
+            pos += 12;
+            continue;
+        }
+
+        size_t nextObj = json.find("\"employeeId\":", pos + 12);
+        if (nextObj == std::string::npos) nextObj = json.length();
+
+        std::string obj = json.substr(objStart, nextObj - objStart);
+
+        double employeeId = 0;
+        double timestamp = 0;
+        std::string date;
+        extractJsonNumber(obj, "employeeId", employeeId);
+        extractJsonString(obj, "date", date);
+        extractJsonNumber(obj, "timestamp", timestamp);
+
+        AttendanceRecord record;
+        record.employeeId = static_cast<int>(employeeId);
+        record.date = date;
+        record.timestamp = timestamp;
+        attendanceRecords.push_back(record);
+
+        pos = nextObj;
+    }
+
+    return !attendanceRecords.empty();
+}
+
 double ApiServer::currentTimeMillis() { return static_cast<double>(std::time(NULL)) * 1000.0; }
+std::string ApiServer::currentDateISO() {
+    std::time_t now = std::time(NULL);
+    std::tm tmNow = *std::localtime(&now);
+    char buffer[11];
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tmNow);
+    return std::string(buffer);
+}
+
+std::string ApiServer::currentMonthISO() {
+    std::time_t now = std::time(NULL);
+    std::tm tmNow = *std::localtime(&now);
+    char buffer[8];
+    std::strftime(buffer, sizeof(buffer), "%Y-%m", &tmNow);
+    return std::string(buffer);
+}
 std::string ApiServer::jsonEscape(const std::string& v) { return v; }
 std::string ApiServer::numberJson(double v) { std::ostringstream oss; oss << v; return oss.str(); }
 std::string ApiServer::getMimeType(const std::string& p) {
-    if (p.substr(p.size() - 5) == ".html") return "text/html";
-    if (p.substr(p.size() - 3) == ".js") return "application/javascript";
-    if (p.substr(p.size() - 4) == ".css") return "text/css";
+    if (p.size() >= 5 && p.substr(p.size() - 5) == ".html") return "text/html";
+    if (p.size() >= 3 && p.substr(p.size() - 3) == ".js") return "application/javascript";
+    if (p.size() >= 4 && p.substr(p.size() - 4) == ".css") return "text/css";
+    if (p.size() >= 4 && p.substr(p.size() - 4) == ".png") return "image/png";
+    if (p.size() >= 4 && p.substr(p.size() - 4) == ".svg") return "image/svg+xml";
+    if (p.size() >= 4 && p.substr(p.size() - 4) == ".jpg") return "image/jpeg";
+    if (p.size() >= 5 && p.substr(p.size() - 5) == ".jpeg") return "image/jpeg";
+    if (p.size() >= 5 && p.substr(p.size() - 5) == ".webp") return "image/webp";
     return "text/plain";
 }
 
-std::string ApiServer::normalizeUsername(const std::string& u) { return u; }
+std::string ApiServer::normalizeUsername(const std::string& username) { return toLower(trim(username)); }
 std::string ApiServer::passwordDigest(const std::string& u, const std::string& p) { return u + p; }
 std::string ApiServer::bearerToken(const HttpRequest& r) {
     auto it = r.headers.find("authorization");
@@ -765,6 +1285,18 @@ bool ApiServer::extractJsonNumber(const std::string& j, const std::string& k, do
     return true;
 }
 
-std::string ApiServer::trim(const std::string& v) { return v; }
+std::string ApiServer::trim(const std::string& value) {
+    std::size_t start = 0;
+    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
+        start++;
+    }
+
+    std::size_t end = value.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+        end--;
+    }
+
+    return value.substr(start, end - start);
+}
 std::string ApiServer::toLower(std::string v) { std::transform(v.begin(), v.end(), v.begin(), ::tolower); return v; }
 bool ApiServer::startsWith(const std::string& v, const std::string& p) { return v.substr(0, p.size()) == p; }

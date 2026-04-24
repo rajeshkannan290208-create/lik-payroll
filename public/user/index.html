@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee | LIK Payroll</title>
+    <link rel="stylesheet" href="../styles.css?v=20260424-4">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="portal-page user-page is-locked">
+    <canvas id="glitterCanvas"></canvas>
+
+    <section id="lockScreen" class="lock-screen portal-auth-screen portal-auth-minimal">
+        <div class="lock-panel auth-form-standalone">
+            <a class="auth-back-link auth-back-link-top" href="../index.html">Back To Front Page</a>
+            <h1>Employee Portal</h1>
+            <p class="auth-subtitle">Secure personal login</p>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="loginUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button type="button" id="loginBtn" class="btn btn-primary btn-block glow-action">Login</button>
+                <div id="authMessage" class="auth-message hidden"></div>
+            </form>
+        </div>
+    </section>
+
+    <div id="appShell" class="container">
+        <header class="header">
+            <div>
+                <h1>LIK Employee Portal</h1>
+                <p>Personal profile, attendance, and secure payslip access.</p>
+            </div>
+            <div class="header-actions">
+                <div class="status-indicator">
+                    <span id="statusDot" class="status-dot"></span>
+                    <span id="statusText">Checking...</span>
+                </div>
+                <button class="btn btn-secondary glow-action" id="logoutBtn" type="button">Logout</button>
+            </div>
+        </header>
+
+        <nav class="navbar">
+            <button class="nav-btn active" data-page="home">Home</button>
+            <button class="nav-btn" data-page="attendance">Attendance</button>
+            <button class="nav-btn" data-page="payslip">Payslip</button>
+        </nav>
+
+        <main class="main-content">
+            <div id="home" class="page active">
+                <div class="dashboard-grid">
+                    <div class="stat-card">
+                        <h3>Profile</h3>
+                        <div class="profile-wrap">
+                            <img id="profilePhoto" class="profile-photo" src="https://via.placeholder.com/90" alt="Profile Photo">
+                            <div>
+                                <div class="profile-name" id="profileName">-</div>
+                                <div class="profile-role" id="profileDept">-</div>
+                                <div class="profile-id-line" id="profileIdLine">Employee ID: -</div>
+                            </div>
+                        </div>
+                        <div class="profile-kv">
+                            <strong>Portal User ID</strong><span id="profileUserId">-</span>
+                            <strong>Username</strong><span id="profileUsername">-</span>
+                            <strong>Date Of Join</strong><span id="profileDoj">-</span>
+                            <strong>Attendance</strong><span id="profileAttendance">-</span>
+                            <strong>Leave Days</strong><span id="profileLeave">-</span>
+                            <strong>Payment Method</strong><span id="profilePayment">-</span>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <h3>Today</h3>
+                        <p class="portal-note" id="todayLine">-</p>
+                        <div class="btn-row">
+                            <button class="btn btn-success glow-action" id="markTodayBtn" type="button">Mark Attendance</button>
+                            <button class="btn btn-info glow-action" id="openPayslipBtn" type="button">Open Payslip</button>
+                        </div>
+                        <div class="status-line" id="todayStatus">-</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <h3>My Payslip</h3>
+                        <p class="inline-salary" id="homeNetSalary">$0.00</p>
+                        <p class="portal-note" id="homePayrollNote">Your secure payslip will appear here after the linked employee payroll is available.</p>
+                        <div class="btn-row">
+                            <button class="btn btn-info glow-action" id="downloadQuickPayslipBtn" type="button">Download Payslip</button>
+                        </div>
+                        <div class="status-line" id="payrollSecurityLine">Payslip access is locked to your employee ID.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="attendance" class="page">
+                <div class="page-header">
+                    <h2>Attendance</h2>
+                    <button class="btn btn-success glow-action" id="markAttendanceBtn" type="button">Mark Today</button>
+                </div>
+
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="payslip" class="page">
+                <div class="page-header">
+                    <div>
+                        <h2>My Payslip</h2>
+                        <p class="page-subtitle">This page fetches only the payroll linked to your employee account from the admin portal.</p>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-info glow-action" id="downloadPayslipBtn" type="button">Download PDF</button>
+                        <button class="btn btn-primary glow-action" id="refreshPayslipBtn" type="button">Refresh</button>
+                    </div>
+                </div>
+
+                <div class="report-content secure-note">
+                    <strong>Secure Access</strong>
+                    <p>Admin manages employee payroll in the main portal. This screen can only fetch the payslip whose employee ID matches your linked login.</p>
+                </div>
+
+                <div id="employeePayslipContainer" class="employee-payslip-panel"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="notification" class="notification hidden"></div>
+
+    <script src="../glitter.js?v=20260424-4"></script>
+    <script src="../api.js?v=20260424-4"></script>
+    <script src="user.js?v=20260424-4"></script>
+</body>
+</html>

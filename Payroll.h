@@ -22,6 +22,9 @@ public:
     // Calculate net salary
     double calculateNetSalary(const Employee& emp) const;
 
+    // Calculate salary per day
+    double calculateSalaryPerDay(const Employee& emp) const;
+
     // Display payroll details
     void displayPayrollSlip(const Employee& emp) const;
 };

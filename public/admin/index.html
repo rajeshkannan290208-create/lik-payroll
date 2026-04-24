@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin | LIK Payroll</title>
+    <link rel="stylesheet" href="../styles.css?v=20260424-4">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="portal-page admin-page is-locked">
+    <canvas id="glitterCanvas"></canvas>
+
+    <section id="lockScreen" class="lock-screen portal-auth-screen portal-auth-minimal">
+        <div class="lock-panel auth-form-standalone">
+            <a class="auth-back-link auth-back-link-top" href="../index.html">Back To Front Page</a>
+            <h1>LIK Payroll</h1>
+            <p class="auth-subtitle">Admin login portal</p>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="loginUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button type="button" id="loginBtn" class="btn btn-primary btn-block glow-action">Login</button>
+                <div id="authMessage" class="auth-message hidden"></div>
+            </form>
+        </div>
+    </section>
+
+    <div id="appShell" class="container">
+        <header class="header">
+            <div>
+                <h1>LIK Payroll Command</h1>
+                <p>Manage employees, linked user accounts, payroll, and attendance.</p>
+            </div>
+            <div class="header-actions">
+                <div class="status-indicator">
+                    <span id="statusDot" class="status-dot"></span>
+                    <span id="statusText">Checking...</span>
+                </div>
+                <button id="adminLogoutBtn" class="btn btn-secondary header-logout glow-action" type="button">Logout</button>
+            </div>
+        </header>
+
+        <nav class="navbar">
+            <button class="nav-btn active" data-page="dashboard">Board</button>
+            <button class="nav-btn" data-page="employees">Employees</button>
+            <button class="nav-btn" data-page="users">Users</button>
+            <button class="nav-btn" data-page="attendance">Attendance</button>
+            <button class="nav-btn" data-page="payroll">Payroll</button>
+            <button class="nav-btn" data-page="reports">Reports</button>
+        </nav>
+
+        <main class="main-content">
+            <div id="dashboard" class="page active">
+                <div class="dashboard-grid">
+                    <div class="stat-card card-employees">
+                        <h3>Employees</h3>
+                        <p class="stat-value" id="totalEmployees">0</p>
+                    </div>
+                    <div class="stat-card card-payroll">
+                        <h3>Total Monthly Payroll</h3>
+                        <p class="stat-value" id="totalPayroll">$0.00</p>
+                    </div>
+                    <div class="stat-card card-average">
+                        <h3>Average Net Salary</h3>
+                        <p class="stat-value" id="averageSalary">$0.00</p>
+                    </div>
+                    <div class="stat-card card-highest">
+                        <h3>Highest Salary</h3>
+                        <p class="stat-value" id="highestSalary">$0.00</p>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <h2>Quick Actions</h2>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary glow-action" onclick="switchPage('employees'); showAddEmployeeForm();">Add Employee</button>
+                        <button class="btn btn-info glow-action" onclick="switchPage('payroll');">View All Payrolls</button>
+                        <button class="btn btn-success glow-action" onclick="switchPage('reports'); generateMonthlyReport();">Generate Report</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="employees" class="page">
+                <div class="page-header">
+                    <h2>Employees</h2>
+                    <button class="btn btn-primary glow-action" onclick="showAddEmployeeForm();">Add Employee</button>
+                </div>
+
+                <div id="employeeFormContainer" class="form-container hidden">
+                    <form id="employeeForm" class="form">
+                        <h3 id="formTitle">Add New Employee</h3>
+                        <div class="form-group" id="empIdGroup">
+                            <label>Employee ID (Auto-generated from 101)</label>
+                            <input type="text" id="empId" disabled style="opacity: 0.6; cursor: not-allowed;">
+                        </div>
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="empName" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Department *</label>
+                            <input type="text" id="empDept" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Date of Join *</label>
+                            <input type="date" id="empDOJ" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Basic Salary ($) *</label>
+                            <input type="number" id="empSalary" min="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Allowance ($)</label>
+                            <input type="number" id="empAllowance" min="0" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Bonus Percentage (%)</label>
+                            <input type="number" id="empBonus" min="0" max="100" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Attendance (Days Present) *</label>
+                            <input type="number" id="empAttendance" min="0" max="31" value="30" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Leave Days</label>
+                            <input type="number" id="empLeave" min="0" max="31" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Payment Method</label>
+                            <select id="empPaymentMethod" onchange="toggleBankDetails();" class="form-select">
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Cash">Cash</option>
+                                <option value="Cheque">Cheque</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div id="bankDetails" class="bank-details-group">
+                            <div class="form-group">
+                                <label>Bank Name</label>
+                                <input type="text" id="empBankName">
+                            </div>
+                            <div class="form-group">
+                                <label>Account Number</label>
+                                <input type="text" id="empAccountNumber">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Photo</label>
+                            <input type="file" id="empPicture" accept="image/*" onchange="previewImage(this);">
+                            <div id="imagePreviewContainer" class="image-preview-container hidden">
+                                <img id="imagePreview" src="" alt="Preview">
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-primary glow-action" onclick="saveEmployee();">Save</button>
+                            <button type="button" class="btn btn-secondary glow-action" onclick="hideEmployeeForm();">Cancel</button>
+                        </div>
+                        <p class="form-note">New employee IDs are assigned automatically from 101 onward.</p>
+                    </form>
+                </div>
+
+                <div id="employeesList" class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Photo</th>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Department</th>
+                                <th>Salary</th>
+                                <th>Attendance</th>
+                                <th>Last Mark</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeesTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="users" class="page">
+                <div class="page-header">
+                    <div>
+                        <h2>User Logins</h2>
+                        <p class="page-subtitle">Each employee login gets a unique user ID and can only be linked to one employee record.</p>
+                    </div>
+                </div>
+
+                <div class="form-container">
+                    <form id="createUserForm" class="form">
+                        <h3>Create Employee Login</h3>
+                        <div class="form-group">
+                            <label>Employee *</label>
+                            <select id="userEmployeeId" class="form-select" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Username *</label>
+                            <input type="text" id="newUsername" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Password *</label>
+                            <input type="password" id="newPassword" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary glow-action">Create Secure Login</button>
+                        </div>
+                        <p class="form-note">The employee portal can fetch only the payslip that matches the linked employee ID shown here.</p>
+                    </form>
+                </div>
+
+                <div class="table-container" style="margin-top:1.5rem">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>User ID</th>
+                                <th>Username</th>
+                                <th>Employee ID</th>
+                                <th>Employee Name</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="attendance" class="page">
+                <div class="page-header">
+                    <h2>Attendance</h2>
+                </div>
+
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Employee ID</th>
+                                <th>Name</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceTableAdmin"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="payroll" class="page">
+                <div class="page-header">
+                    <h2>Payroll</h2>
+                    <div class="period-selector">
+                        <select id="payrollYear" onchange="loadAllPayrolls();" class="form-select"></select>
+                        <select id="payrollMonth" onchange="loadAllPayrolls();" class="form-select"></select>
+                    </div>
+                </div>
+                <div id="payrollList" class="payroll-container"></div>
+            </div>
+
+            <div id="reports" class="page">
+                <div class="page-header">
+                    <h2>Reports</h2>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-info glow-action" onclick="generateMonthlyReport();">Generate Monthly Report</button>
+                    <button class="btn btn-success glow-action" onclick="exportEmployees();">Export To JSON</button>
+                </div>
+                <div id="reportContent" class="report-content" style="margin-top:1.4rem"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="payrollModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closePayrollModal();">&times;</span>
+            <div id="payrollDetails"></div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification hidden"></div>
+
+    <script src="../glitter.js?v=20260424-4"></script>
+    <script src="../api.js?v=20260424-4"></script>
+    <script src="../script.js?v=20260424-4"></script>
+</body>
+</html>

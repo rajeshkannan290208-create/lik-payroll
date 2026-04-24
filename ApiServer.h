@@ -22,6 +22,8 @@ private:
         int id;
         std::string username;
         std::string passwordHash;
+        std::string role; // "admin" | "user"
+        int employeeId;   // only for role=="user", else -1
     };
 
     struct Session {
@@ -30,9 +32,16 @@ private:
         double expiresAt;
     };
 
+    struct AttendanceRecord {
+        int employeeId;
+        std::string date; // YYYY-MM-DD
+        double timestamp;
+    };
+
     std::vector<Employee> employees;
     std::vector<User> users;
     std::vector<Session> sessions;
+    std::vector<AttendanceRecord> attendanceRecords;
     Payroll payroll;
     int port;
     int nextUserId;
@@ -60,17 +69,23 @@ private:
     int findEmployeeIndex(int employeeId) const;
     int findUserIndexByUsername(const std::string& username) const;
     int findUserIndexById(int userId) const;
+    int findUserIndexByEmployeeId(int employeeId) const;
     int findSessionIndex(const std::string& token) const;
     int nextEmployeeId() const;
     bool isAuthenticated(const HttpRequest& request) const;
+    int authenticatedUserIndex(const HttpRequest& request) const;
     std::string makeSessionToken() const;
 
     bool saveEmployeesToJsonFile(const std::string& filename) const;
     bool loadEmployeesFromJsonFile(const std::string& filename);
     bool saveUsersToFile() const;
     bool loadUsersFromFile();
+    bool saveAttendanceToFile() const;
+    bool loadAttendanceFromFile();
 
     static double currentTimeMillis();
+    static std::string currentDateISO();
+    static std::string currentMonthISO();
     static std::string jsonEscape(const std::string& value);
     static std::string numberJson(double value);
     static std::string getMimeType(const std::string& path);

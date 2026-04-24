@@ -79,25 +79,31 @@ Then open:
 http://localhost:3000
 ```
 
-The C++ backend serves the frontend and these API routes. Payroll data routes require a login bearer token from `/api/auth/login`.
+The C++ backend serves the frontend and these API routes. Most routes require a login bearer token from `/api/auth/admin/login` (admin portal) or `/api/auth/user/login` (employee portal).
 
 ```text
 GET    /api/health
 POST   /api/auth/register
+POST   /api/auth/admin/login
+POST   /api/auth/user/login
 POST   /api/auth/login
 GET    /api/auth/me
 POST   /api/auth/logout
-GET    /api/employees
-POST   /api/employees
-GET    /api/employees/:id
-PUT    /api/employees/:id
-DELETE /api/employees/:id
+GET    /api/employees            (admin)
+POST   /api/employees            (admin)
+GET    /api/employees/:id        (admin)
+PUT    /api/employees/:id        (admin)
+DELETE /api/employees/:id        (admin)
+GET    /api/employees/me         (employee)
+GET    /api/admin/users          (admin)
+POST   /api/admin/users          (admin)
+POST   /api/attendance/mark      (employee)
+GET    /api/attendance/me        (employee)
+GET    /api/attendance           (admin)
 GET    /api/payroll
 GET    /api/payroll/:id
 GET    /api/report/monthly
 GET    /api/statistics
-POST   /api/export/file
-POST   /api/import/file
 ```
 
 ## Sample Data
