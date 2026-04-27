@@ -1,7 +1,5 @@
 // API Configuration
-const API_BASE_URL = window.location.port === '3000'
-    ? '/api'
-    : 'http://localhost:3000/api';
+const API_BASE_URL = "https://lik-payroll.onrender.com/api";
 
 const DEMO_EMPLOYEES = [
     {
