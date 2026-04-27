@@ -790,7 +790,7 @@ std::string ApiServer::handleStaticRequest(const HttpRequest& request) const {
     if (path.find("..") != std::string::npos) return buildResponse(403, "text/plain", "Forbidden");
     if (!path.empty() && path[0] == '/') path.erase(0, 1);
 
-    std::string filePath = "public/" + path;
+    std::string filePath = "../frontend/" + path;
     std::ifstream file(filePath.c_str(), std::ios::binary);
     if (!file.is_open()) return buildResponse(404, "text/plain", "Not found");
 

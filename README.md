@@ -1,76 +1,32 @@
 # PAYROLL MANAGEMENT SYSTEM
 
-A comprehensive payroll application with a pure C++ HTTP backend and a modern web frontend.
+A payroll application with a pure C++ HTTP backend and a browser frontend.
+
+## Project Structure
+
+- `frontend/` - HTML, CSS, JS, assets, admin portal, employee portal
+- `backend/` - C++ source files, JSON data, build scripts, logs, executable
+- `build.bat` - root wrapper for `backend\build.bat`
+- `START_SERVER.bat` - root wrapper for `backend\START_SERVER.bat`
 
 ## Features
 
-- **Employee Management**: Add, remove, and view employees
-- **Salary Calculations**: Automatically calculate gross salary, deductions, and net salary
-- **Payroll Slips**: Generate detailed payroll slips for individual employees
-- **Monthly Reports**: Generate comprehensive monthly payroll reports
-- **Statistics**: Display payroll statistics including totals and averages
-- **File Operations**: Save and load employee data from JSON files
-- **Tax & Deductions**: Automatic tax calculations, provident fund, and health insurance deductions
-- **Web API**: C++ server exposes JSON routes for the browser UI
-- **Static Frontend Hosting**: C++ server serves the `public` folder directly
-- **Lock Screen Login**: Register an app account, then unlock the payroll dashboard with username and password
+- Employee management
+- Payroll calculations
+- Monthly reports
+- Admin and employee login portals
+- Employee-only payslip access
+- Attendance tracking
+- Static frontend hosting from the C++ server
 
-## Salary Calculations
+## Run The App
 
-### Gross Salary
-```
-Gross Salary = Basic Salary + Allowance + Bonus
-```
+### Online Mode
 
-### Deductions
-- **Tax**: 12% of Gross Salary
-- **Provident Fund**: 8% of Basic Salary
-- **Health Insurance**: Fixed $100
+From the project root:
 
-### Net Salary
-```
-Net Salary = Gross Salary - Total Deductions
-```
-
-## File Structure
-
-**C++ Backend:**
-- ✅ ApiServer.cpp / .h
-- ✅ Employee.cpp / .h
-- ✅ Payroll.cpp / .h
-- ✅ web_server.cpp
-- ✅ Build files (Makefile, build.bat)
-- `public/` - Browser UI files (HTML, CSS, JS)
-
-## Compilation
-
-### C++ Web Backend
-```bash
-build.bat
-```
-
-or:
-
-```bash
-make
-```
-
-This creates `payroll_api_server.exe` on Windows.
-
-### Manual Compilation
-```bash
-g++ -std=c++11 -Wall -Wextra -c Employee.cpp -o Employee.o
-g++ -std=c++11 -Wall -Wextra -c Payroll.cpp -o Payroll.o
-g++ -std=c++11 -Wall -Wextra -c ApiServer.cpp -o ApiServer.o
-g++ -std=c++11 -Wall -Wextra -c web_server.cpp -o web_server.o
-g++ Employee.o Payroll.o ApiServer.o web_server.o -o payroll_api_server.exe -lws2_32
-```
-
-## Running the Application
-
-### Web UI with C++ Backend
-```bash
-build.bat run
+```batch
+START_SERVER.bat
 ```
 
 Then open:
@@ -79,7 +35,35 @@ Then open:
 http://localhost:3000
 ```
 
-The C++ backend serves the frontend and these API routes. Most routes require a login bearer token from `/api/auth/admin/login` (admin portal) or `/api/auth/user/login` (employee portal).
+### Offline / Demo Mode
+
+Open:
+
+```text
+frontend\index.html
+```
+
+This uses browser storage and does not require the backend to be running.
+
+## Build Commands
+
+From the project root:
+
+```batch
+build.bat web
+build.bat run
+build.bat clean
+```
+
+The compiled executable is created in:
+
+```text
+backend\payroll_api_server.exe
+```
+
+## Backend API
+
+The backend serves the frontend and these API routes:
 
 ```text
 GET    /api/health
@@ -100,32 +84,19 @@ POST   /api/admin/users          (admin)
 POST   /api/attendance/mark      (employee)
 GET    /api/attendance/me        (employee)
 GET    /api/attendance           (admin)
-GET    /api/payroll
-GET    /api/payroll/:id
+GET    /api/payroll              (admin)
+GET    /api/payroll/:id          (admin)
+GET    /api/payroll/me           (employee)
 GET    /api/report/monthly
 GET    /api/statistics
 ```
 
-## Sample Data
+## Important Note About Device Guard
 
-The system comes with 4 pre-loaded employees:
-- John Smith (Engineering)
-- Sarah Johnson (Marketing)
-- Mike Williams (HR)
-- Emily Brown (Finance)
+If Windows shows a message like:
 
-## Requirements
+```text
+was blocked by your organization's Device Guard policy
+```
 
-- C++11 or higher
-- GCC or Clang compiler
-- Standard C++ libraries (iostream, string, vector, fstream, algorithm, iomanip)
-
-## Future Enhancements
-
-- Database integration (MySQL/PostgreSQL)
-- Email notification for payslips
-- Advanced filtering and search
-- Leave management system
-- Overtime calculation
-- Department-wise reports
-- Role-based access control
+the folder structure is not the problem. That means Windows policy is blocking unsigned executables on this machine. The frontend can still run in demo mode, but the backend EXE must be allowed by local admin/support before online features will work.

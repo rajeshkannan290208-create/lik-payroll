@@ -1,6 +1,7 @@
 *.o
 *.exe
 *.obj
+*.log
 .vscode/
 node_modules/
 dist/

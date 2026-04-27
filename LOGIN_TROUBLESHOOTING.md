@@ -1,101 +1,78 @@
-# Login Troubleshooting Guide
+# LOGIN TROUBLESHOOTING
 
-## Quick Fix - Session Expired Issue
+## 1. Start The Backend
 
-If you're seeing "Session expired. Please login again." even after successfully logging in, follow these steps:
-
-### Step 1: Make Sure the API Server is Running
-The C++ backend server MUST be running on port 3000 for the system to work properly.
-
-**To start the server:**
-1. Open Command Prompt/PowerShell in the project folder
-2. Run: `build.bat run`
-3. Wait for the output: `Server running on http://localhost:3000`
-4. Keep this window open while using the app
-
-### Step 2: Clear Browser Cache & LocalStorage
-1. Open the Payroll app in your browser
-2. Press `F12` to open Developer Tools
-3. Go to **Application** tab > **Storage** > **Local Storage**
-4. Find and click on `http://localhost:5500` (or your current domain)
-5. Clear all data
-6. Refresh the page (F5)
-
-### Step 3: Test Login
-Try logging in with these credentials (portal-specific):
-
-**Admin Portal (`/admin/`)**
-
-| Username | Password |
-|----------|----------|
-| rajesh | rajesh123456 |
-
-**Employee Portal (`/user/`)**
-
-| Username | Password |
-|----------|----------|
-| rajeshk | rajeshk123456 |
-| rajeshka | rajeshka123456 |
-
-### Step 4: Check Browser Console for Errors
-1. Open Developer Tools (F12)
-2. Go to **Console** tab
-3. Look for any error messages
-4. Check if you see "PayrollAPI loaded successfully"
-5. Look for any API errors when you try to login
-
-### Common Issues & Solutions
-
-**Issue: "Failed to connect to server" or API not responding**
-- Solution: Make sure `build.bat run` is executed and the server is running
-
-**Issue: "Invalid username or password"**  
-- Solution: Check the username and password are correct (case-sensitive)
-- Make sure you're logging into the correct portal (Admin vs Employee)
-
-**Issue: Login works but then shows "Session expired" immediately**
-- Solution:
-  1. Make sure the C++ API server is running (not just in demo/offline mode)
-  2. Clear browser localStorage (see Step 2)
-  3. Try logging in again
-
-**Issue: "Cannot connect to port 3000"**
-- Solution:
-  1. Make sure no other application is using port 3000
-  2. Try running: `netstat -an | find ":3000"` to check if port is in use
-  3. Rebuild the server: `build.bat clean` then `build.bat run`
-
-### How to Add New Users
-
-If you want to add new login credentials, edit `users.json`:
-
-```json
-[
-  {"id":1,"u":"username","p":"<password_digest>","role":"admin","employeeId":-1},
-  {"id":2,"u":"employeeuser","p":"<password_digest>","role":"user","employeeId":101}
-]
-```
-
-The password_digest is calculated as: **username + password**
-
-Example: For username="test" and password="pass123", the digest is "testpass123"
-
-### Manual Server Build (if needed)
+From the project root run:
 
 ```batch
-build.bat clean       # Clean old build files
-build.bat web         # Build the server
-build.bat run         # Build and run the server
+START_SERVER.bat
 ```
 
-### Debug Information
-Check the server console output for:
-- Connection attempts from the browser
-- Login attempts (successful or failed)
-- Session creation/validation messages
+Keep that window open while using the app.
 
-If you see errors in the server output, the issue is likely there.
+## 2. Clear Browser Storage
 
----
+1. Open the app in the browser
+2. Press `F12`
+3. Go to Application > Storage > Local Storage
+4. Clear the stored payroll data
+5. Refresh and log in again
 
-**Need more help?** Check the README.md for architecture details.
+## 3. Check The Correct Portal
+
+Admin portal:
+
+- `http://localhost:3000/admin/`
+
+Employee portal:
+
+- `http://localhost:3000/user/`
+
+## 4. Common Problems
+
+### Failed to connect to server
+
+- Make sure `START_SERVER.bat` is running
+- Check port `3000` is free
+
+### Invalid username or password
+
+- Use the correct portal
+- Check the username/password exactly
+- User records are stored in `backend\users.json`
+
+### Session expired immediately
+
+- Clear browser local storage
+- Log in again
+- Make sure the backend is still running
+
+### Device Guard policy block
+
+If you see:
+
+```text
+was blocked by your organization's Device Guard policy
+```
+
+then Windows is blocking `backend\payroll_api_server.exe`. The project structure is already fixed, but online mode cannot run until that executable is allowed by local admin/support.
+
+## 5. Rebuild The Backend
+
+From the project root:
+
+```batch
+build.bat clean
+build.bat web
+build.bat run
+```
+
+## 6. Demo Mode
+
+If the backend cannot run, you can still open:
+
+```text
+frontend\index.html
+```
+
+and use the frontend in offline/demo mode.
