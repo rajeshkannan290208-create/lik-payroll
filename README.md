@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PAYROLL MANAGEMENT SYSTEM
 
 A payroll application with a pure C++ HTTP backend and a browser frontend.
@@ -100,3 +101,6 @@ was blocked by your organization's Device Guard policy
 ```
 
 the folder structure is not the problem. That means Windows policy is blocking unsigned executables on this machine. The frontend can still run in demo mode, but the backend EXE must be allowed by local admin/support before online features will work.
+=======
+# lik-payroll
+>>>>>>> ee0a33304e68598d155a6111931239f7a305d0bc
